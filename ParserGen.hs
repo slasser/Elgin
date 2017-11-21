@@ -7,14 +7,9 @@ import Language.Haskell.TH
 
 data Symbol = T String | NT String deriving (Eq, Show)
 
-mkDecs = forM [(NT "S", [(T "If", [T "If", NT "E", T "Then"]),
-                          (T "Begin", [T "Begin", T "End"])]),
-               (NT "E", [(T "Num", [T "Num", T "Eq", T "Num"])])] mkDec
+data Ast = Leaf String | Node String [Ast] deriving (Eq, Show) 
 
-mkDecs' grammar = forM grammar mkDec
-
--- To do : refactor, add wildcard match in case expression
--- Next step : add some input examples and documentation, and find out how to get the spliced code
+-- To do : add wildcard match in case expression
 mkDec :: (Symbol, [(Symbol, [Symbol])]) -> Q Dec
 mkDec (T _, _)        = error ""
 mkDec (NT ntName, pairs) = funD funName [nilClause, consClause]
@@ -26,11 +21,19 @@ mkDec (NT ntName, pairs) = funD funName [nilClause, consClause]
     subtrees      = mkName $ "subtrees"
     parseSubtrees = mkName $ "parseSubtrees"
     tokens'       = mkName $ "tokens'"
-    
+
+    -- Example clause:
+    -- parseS [] = error ("out of tokens while parsing " ++ "S")
     nilClause  = let nilPatt = [p| [] |]
                      body    = normalB [e| error ("out of tokens while parsing " ++ ntName) |]
                  in  clause [nilPatt] body []
                      
+    -- Example clause:
+    -- parseS tokens@(first : rest) =
+    --   let (subtrees, tokens') = case first of
+    --                               T "Begin" -> parseSubtrees tokens [eat (T "Begin"), parseS, parseL]
+    --                               T "Print" -> parseSubtrees tokens [eat (T "Print"), parseE]
+    --   in (Node "S" subtrees, tokens')
     consClause = let consPatt = asP tokens [p| $(varP first) : $(varP rest) |]
                      caseExpr = caseE [e| $(varE first) |] (map mkMatch pairs)
                      letExpr = [e| let ($(varP subtrees), $(varP tokens')) = $(caseExpr)
@@ -48,9 +51,6 @@ mkDec (NT ntName, pairs) = funD funName [nilClause, consClause]
     symbolE (T tName) = [e| eat (T tName) |]
     symbolE (NT ntName) = varE (mkName $ "parse" ++ ntName)
 
-
-data Ast = Leaf String | Node String [Ast] deriving (Eq, Show) 
-
 eat :: Symbol -> [Symbol] -> (Ast, [Symbol])
 eat (NT _) _    = error "expected a terminal symbol"
 eat (T _) []    = error "no tokens to eat"
@@ -64,7 +64,11 @@ parseSubtrees tokens parseFuncs =
         ([], tokens)
         parseFuncs
 
-  
+
+mkDecs :: [(Symbol, [(Symbol, [Symbol])])] -> Q [Dec]
+mkDecs grammar = forM grammar mkDec
+
+-- Grammar 3.11 from Appel's "Modern Compiler Implementation in ML"
 g311 = [(NT "S", [(T "If",    [T "If", NT "E", T "Then", NT "S", T "Else", NT "S"]),
                   (T "Begin", [T "Begin", NT "S", NT "L"]),
                   (T "Print", [T "Print", NT "E"])]),

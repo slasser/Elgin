@@ -43,5 +43,8 @@ parseSubtrees tokens parseFuncs = foldl (\(sts, ts) f ->
                                             in  (sts ++ [st], ts'))
                                         ([], tokens)
                                         parseFuncs
-               
+
+-- Simple input/output example
+input1 = [If, Num, Eq, Num, Then, Print, Num, Eq, Num, Else, Print, Num, Eq, Num]
+parse1 = parseS input1
                                         
